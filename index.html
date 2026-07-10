@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kanal — Live Chat by Room Code</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0e1116;
+    --panel: #171b22;
+    --panel-2: #1d222b;
+    --line: #2a2f3a;
+    --text: #e8e6e1;
+    --text-dim: #8b93a1;
+    --amber: #f5a623;
+    --amber-dim: #7a5717;
+    --green: #3ecf8e;
+    --red: #e85d5d;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(ellipse at 20% -10%, rgba(245,166,35,0.07), transparent 45%),
+      radial-gradient(ellipse at 100% 100%, rgba(62,207,142,0.05), transparent 45%),
+      var(--bg);
+    color:var(--text);
+    font-family:'Inter', sans-serif;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  .mono{ font-family:'JetBrains Mono', monospace; }
+
+  /* ---------- Scanline texture ---------- */
+  .scan{
+    position:fixed; inset:0; pointer-events:none; z-index:0;
+    background:repeating-linear-gradient(
+      to bottom, rgba(255,255,255,0.014) 0px, rgba(255,255,255,0.014) 1px,
+      transparent 1px, transparent 3px
+    );
+    mix-blend-mode:overlay;
+  }
+
+  /* ================= LANDING ================= */
+  .landing{
+    position:relative; z-index:1;
+    width:100%; max-width:420px;
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border:1px solid var(--line);
+    border-radius:18px;
+    padding:36px 32px 30px;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.03);
+  }
+  .brand{
+    display:flex; align-items:center; gap:10px; margin-bottom:6px;
+  }
+  .dot-pulse{
+    width:9px; height:9px; border-radius:50%;
+    background:var(--green);
+    box-shadow:0 0 0 0 rgba(62,207,142,0.6);
+    animation:pulse 2s infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 rgba(62,207,142,0.55); }
+    70%{ box-shadow:0 0 0 8px rgba(62,207,142,0); }
+    100%{ box-shadow:0 0 0 0 rgba(62,207,142,0); }
+  }
+  .brand span.mono{
+    font-size:12px; letter-spacing:.18em; color:var(--text-dim); text-transform:uppercase;
+  }
+  h1{
+    font-family:'JetBrains Mono', monospace;
+    font-size:26px; font-weight:800; letter-spacing:-0.02em;
+    margin:8px 0 4px;
+  }
+  h1 em{ color:var(--amber); font-style:normal; }
+  .sub{ color:var(--text-dim); font-size:13.5px; line-height:1.5; margin-bottom:26px; }
+
+  .field{ margin-bottom:16px; }
+  .field label{
+    display:block; font-family:'JetBrains Mono', monospace; font-size:11px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); margin-bottom:8px;
+  }
+  .field input{
+    width:100%; background:#0c0f14; border:1px solid var(--line);
+    border-radius:10px; padding:13px 14px; color:var(--text);
+    font-family:'Inter',sans-serif; font-size:15px; outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  .field input:focus{
+    border-color:var(--amber);
+    box-shadow:0 0 0 3px rgba(245,166,35,0.12);
+  }
+  .field.code input{
+    font-family:'JetBrains Mono', monospace;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    font-weight:700;
+    font-size:20px;
+    text-align:center;
+    color:var(--amber);
+    padding:14px 10px;
+  }
+  .hint{ font-size:11.5px; color:var(--text-dim); margin-top:7px; line-height:1.5; }
+
+  .join-btn{
+    width:100%; margin-top:8px; border:none; cursor:pointer;
+    background:linear-gradient(180deg, #ffc25c, var(--amber));
+    color:#20130a; font-weight:700; font-size:14.5px;
+    font-family:'JetBrains Mono', monospace; letter-spacing:.06em;
+    padding:14px; border-radius:10px;
+    box-shadow:0 8px 20px -8px rgba(245,166,35,0.55);
+    transition:transform .12s, box-shadow .12s;
+  }
+  .join-btn:hover{ transform:translateY(-1px); box-shadow:0 10px 24px -8px rgba(245,166,35,0.65); }
+  .join-btn:active{ transform:translateY(0); }
+  .join-btn:disabled{ opacity:.55; cursor:default; transform:none; }
+
+  .err{
+    margin-top:14px; font-size:12.5px; color:var(--red);
+    font-family:'JetBrains Mono', monospace; display:none;
+  }
+
+  /* ================= CHAT SCREEN ================= */
+  .chat-wrap{
+    position:relative; z-index:1;
+    width:100%; max-width:520px; height:88vh; max-height:760px;
+    background:linear-gradient(180deg, var(--panel), var(--panel-2));
+    border:1px solid var(--line); border-radius:18px;
+    display:none; flex-direction:column; overflow:hidden;
+    box-shadow:0 30px 60px -20px rgba(0,0,0,0.6);
+  }
+  .chat-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 18px; border-bottom:1px solid var(--line);
+    background:rgba(0,0,0,0.15);
+  }
+  .ch-left{ display:flex; align-items:center; gap:12px; }
+  .freq-box{
+    background:#05070a; border:1px solid var(--amber-dim);
+    border-radius:8px; padding:6px 12px;
+    font-family:'JetBrains Mono', monospace;
+    color:var(--amber); font-weight:800; font-size:15px; letter-spacing:.14em;
+    text-shadow:0 0 8px rgba(245,166,35,0.55);
+  }
+  .ch-status{ font-size:11px; color:var(--text-dim); font-family:'JetBrains Mono', monospace; }
+  .ch-status .dot-pulse{ display:inline-block; margin-right:6px; vertical-align:middle; }
+  .leave-btn{
+    background:none; border:1px solid var(--line); color:var(--text-dim);
+    font-family:'JetBrains Mono', monospace; font-size:11px; letter-spacing:.08em;
+    padding:8px 12px; border-radius:8px; cursor:pointer;
+    transition:border-color .15s, color .15s;
+  }
+  .leave-btn:hover{ border-color:var(--red); color:var(--red); }
+
+  .messages{
+    flex:1; overflow-y:auto; padding:18px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .messages::-webkit-scrollbar{ width:8px; }
+  .messages::-webkit-scrollbar-thumb{ background:var(--line); border-radius:4px; }
+
+  .empty-log{
+    margin:auto; text-align:center; color:var(--text-dim);
+    font-family:'JetBrains Mono', monospace; font-size:12.5px; line-height:1.8;
+  }
+
+  .msg{ max-width:78%; display:flex; flex-direction:column; gap:4px; }
+  .msg.mine{ align-self:flex-end; align-items:flex-end; }
+  .msg.theirs{ align-self:flex-start; align-items:flex-start; }
+  .msg .meta{
+    font-family:'JetBrains Mono', monospace; font-size:10.5px; color:var(--text-dim);
+    letter-spacing:.04em; padding:0 3px;
+  }
+  .msg .bubble{
+    padding:10px 14px; border-radius:14px; font-size:14.5px; line-height:1.45;
+    word-wrap:break-word; white-space:pre-wrap;
+  }
+  .msg.mine .bubble{
+    background:linear-gradient(180deg, #ffc25c, var(--amber));
+    color:#20130a; border-bottom-right-radius:4px; font-weight:500;
+  }
+  .msg.theirs .bubble{
+    background:var(--panel-2); border:1px solid var(--line);
+    color:var(--text); border-bottom-left-radius:4px;
+  }
+  .msg.system{ align-self:center; }
+  .msg.system .bubble{
+    background:transparent; border:1px dashed var(--line);
+    color:var(--text-dim); font-family:'JetBrains Mono', monospace; font-size:11px;
+  }
+
+  .composer{
+    display:flex; gap:10px; padding:14px 16px; border-top:1px solid var(--line);
+    background:rgba(0,0,0,0.15);
+  }
+  .composer input{
+    flex:1; background:#0c0f14; border:1px solid var(--line); border-radius:10px;
+    padding:12px 14px; color:var(--text); font-size:14.5px; outline:none;
+    font-family:'Inter', sans-serif;
+    transition:border-color .15s;
+  }
+  .composer input:focus{ border-color:var(--amber); }
+  .send-btn{
+    background:var(--amber); border:none; color:#20130a; font-weight:800;
+    width:46px; border-radius:10px; cursor:pointer; font-size:16px;
+    display:flex; align-items:center; justify-content:center;
+    transition:transform .12s;
+  }
+  .send-btn:hover{ transform:translateY(-1px); }
+  .send-btn:disabled{ opacity:.5; cursor:default; transform:none; }
+
+  @media (max-width:480px){
+    .chat-wrap{ height:92vh; border-radius:14px; }
+    .landing{ padding:28px 22px 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="scan"></div>
+
+<!-- LANDING -->
+<div class="landing" id="landing">
+  <div class="brand">
+    <span class="dot-pulse"></span>
+    <span class="mono">TRANSCEIVER ONLINE</span>
+  </div>
+  <h1>Masuk ke <em>Kanal</em></h1>
+  <p class="sub">Isi nama dan kode kanal. Semua orang dengan kode yang <strong style="color:var(--text)">sama persis</strong> akan masuk ke obrolan yang sama secara live.</p>
+
+  <div class="field">
+    <label for="nameInput">Nama kamu</label>
+    <input id="nameInput" type="text" placeholder="mis. Budi" maxlength="24" autocomplete="off">
+  </div>
+
+  <div class="field code">
+    <label for="codeInput" style="text-align:center">Kode Kanal</label>
+    <input id="codeInput" type="text" placeholder="XXXXXX" maxlength="16" autocomplete="off">
+    <p class="hint">Bebas buat kode apa saja (contoh: <span class="mono">TEMAN01</span>). Bagikan kode ini ke lawan bicara — huruf besar/kecil dan spasi diabaikan.</p>
+  </div>
+
+  <button class="join-btn" id="joinBtn">▶ MASUK KANAL</button>
+  <p class="err" id="errMsg"></p>
+</div>
+
+<!-- CHAT -->
+<div class="chat-wrap" id="chatWrap">
+  <div class="chat-header">
+    <div class="ch-left">
+      <div class="freq-box" id="freqDisplay">------</div>
+      <div class="ch-status"><span class="dot-pulse"></span>LIVE</div>
+    </div>
+    <button class="leave-btn" id="leaveBtn">KELUAR</button>
+  </div>
+  <div class="messages" id="messages">
+    <div class="empty-log" id="emptyLog">— BELUM ADA PESAN —<br>Jadilah yang pertama mengudara.</div>
+  </div>
+  <div class="composer">
+    <input id="msgInput" type="text" placeholder="Ketik pesan..." maxlength="500" autocomplete="off">
+    <button class="send-btn" id="sendBtn">➤</button>
+  </div>
+</div>
+
+<!-- Menggunakan GunDB CDN untuk sinkronisasi Peer-to-Peer Instan tanpa registrasi/token -->
+<script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+<script>
+(function(){
+  // Menginisialisasi GunDB menggunakan relay peers publik terpercaya
+  const gun = Gun([
+    'https://gun-manhattan.herokuapp.com/gun',
+    'https://gundb-relay.onrender.com/gun'
+  ]);
+
+  const landing = document.getElementById('landing');
+  const chatWrap = document.getElementById('chatWrap');
+  const nameInput = document.getElementById('nameInput');
+  const codeInput = document.getElementById('codeInput');
+  const joinBtn = document.getElementById('joinBtn');
+  const errMsg = document.getElementById('errMsg');
+  const freqDisplay = document.getElementById('freqDisplay');
+  const leaveBtn = document.getElementById('leaveBtn');
+  const messagesEl = document.getElementById('messages');
+  const emptyLog = document.getElementById('emptyLog');
+  const msgInput = document.getElementById('msgInput');
+  const sendBtn = document.getElementById('sendBtn');
+
+  let myName = '';
+  let myId = '';
+  let roomCode = '';
+  let activeRoom = null;
+  let localMessages = {}; 
+
+  function genId(){
+    return 'u_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+  }
+
+  function normalizeCode(raw){
+    return raw.trim().toUpperCase().replace(/\s+/g,'_').replace(/[^A-Z0-9_-]/g,'');
+  }
+
+  function showError(text){
+    errMsg.textContent = text;
+    errMsg.style.display = 'block';
+  }
+  function clearError(){
+    errMsg.style.display = 'none';
+  }
+
+  function fmtTime(ts){
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    return hh+':'+mm;
+  }
+
+  function updateUI(){
+    const arr = Object.values(localMessages).sort((a, b) => a.ts - b.ts);
+    
+    if(arr.length === 0){
+      messagesEl.innerHTML = '';
+      messagesEl.appendChild(emptyLog);
+      return;
+    }
+
+    // Cek posisi scroll sebelum render baru
+    const wasAtBottom = (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight) < 80;
+
+    messagesEl.innerHTML = '';
+    arr.forEach(m => {
+      if(!m.text) return;
+      const wrap = document.createElement('div');
+      if(m.system){
+        wrap.className = 'msg system';
+        wrap.innerHTML = `<div class="bubble">${escapeHtml(m.text)}</div>`;
+      } else {
+        const mine = m.senderId === myId;
+        wrap.className = 'msg ' + (mine ? 'mine' : 'theirs');
+        wrap.innerHTML = `
+          <div class="meta">${mine ? 'Kamu' : escapeHtml(m.name)} · ${fmtTime(m.ts)}</div>
+          <div class="bubble">${escapeHtml(m.text)}</div>
+        `;
+      }
+      messagesEl.appendChild(wrap);
+    });
+
+    if(wasAtBottom || messagesEl.innerHTML !== '') {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+  }
+
+  function escapeHtml(s){
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  function joinRoom(){
+    clearError();
+    const nameVal = nameInput.value.trim();
+    const codeVal = normalizeCode(codeInput.value);
+
+    if(!nameVal){ showError('Nama tidak boleh kosong.'); nameInput.focus(); return; }
+    if(!codeVal){ showError('Kode kanal tidak boleh kosong.'); codeInput.focus(); return; }
+
+    joinBtn.disabled = true;
+    joinBtn.textContent = 'MENGHUBUNGKAN...';
+
+    myName = nameVal;
+    myId = genId();
+    roomCode = 'kanal_room_' + codeVal;
+    localMessages = {};
+
+    // Menghubungkan ke node ruangan spesifik di GunDB
+    activeRoom = gun.get(roomCode);
+
+    // Langsung pantau data yang masuk secara real-time
+    activeRoom.map().on((data, key) => {
+      if (data) {
+        localMessages[key] = data;
+        updateUI();
+      }
+    });
+
+    // Kirim sinyal sistem masuk ruangan
+    const sysMsgId = 'sys_' + Date.now() + '_' + Math.random().toString(36).slice(2,5);
+    activeRoom.get(sysMsgId).put({
+      system: true,
+      text: `${myName} bergabung ke kanal.`,
+      ts: Date.now()
+    });
+
+    landing.style.display = 'none';
+    chatWrap.style.display = 'flex';
+    freqDisplay.textContent = codeVal;
+
+    joinBtn.disabled = false;
+    joinBtn.textContent = '▶ MASUK KANAL';
+
+    setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 300);
+    msgInput.focus();
+  }
+
+  function sendMessage(){
+    const text = msgInput.value.trim();
+    if(!text || !activeRoom) return;
+
+    sendBtn.disabled = true;
+    const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    
+    // Simpan pesan baru langsung ke node GunDB
+    activeRoom.get(msgId).put({
+      senderId: myId,
+      name: myName,
+      text: text,
+      ts: Date.now()
+    });
+
+    msgInput.value = '';
+    sendBtn.disabled = false;
+    msgInput.focus();
+  }
+
+  function leaveRoom(){
+    if(activeRoom) {
+      const sysMsgId = 'sys_' + Date.now() + '_' + Math.random().toString(36).slice(2,5);
+      activeRoom.get(sysMsgId).put({
+        system: true,
+        text: `${myName} keluar dari kanal.`,
+        ts: Date.now()
+      });
+      activeRoom.off(); // Matikan listener ruangan
+    }
+    
+    activeRoom = null;
+    localMessages = {};
+    chatWrap.style.display = 'none';
+    landing.style.display = 'block';
+    messagesEl.innerHTML = '';
+    messagesEl.appendChild(emptyLog);
+    codeInput.value = '';
+  }
+
+  joinBtn.addEventListener('click', joinRoom);
+  codeInput.addEventListener('keydown', e=>{ if(e.key === 'Enter') joinRoom(); });
+  nameInput.addEventListener('keydown', e=>{ if(e.key === 'Enter') joinRoom(); });
+
+  sendBtn.addEventListener('click', sendMessage);
+  msgInput.addEventListener('keydown', e=>{ if(e.key === 'Enter') sendMessage(); });
+
+  leaveBtn.addEventListener('click', leaveRoom);
+})();
+</script>
+</body>
+</html>
